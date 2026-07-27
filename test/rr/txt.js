@@ -228,7 +228,20 @@ describe('TXT presentation-format escaping', function () {
     // payload rather than its presentation.
     const out = txt('has "quotes" and \\ backslash').toMaraDNS()
 
-    assert.match(out, /'has 'quotes' and \\ backslash'/)
+    assert.match(out, /'has "quotes" and \\ backslash'/)
     assert.doesNotMatch(out, /\\"/)
+  })
+
+  it('leaves payload quotes alone, quoting only the csv2 chunk delimiter', () => {
+    // Rewriting every " to ' also hit the payload, which both corrupts the
+    // value and unbalances the surrounding '...' quoting.
+    assert.match(txt('a "b" c').toMaraDNS(), /'a "b" c'/)
+  })
+
+  it('joins chunked MaraDNS output with the csv2 delimiter', () => {
+    const out = txt('y'.repeat(400)).toMaraDNS()
+
+    assert.match(out, /' '/, "chunks are separated by ' '")
+    assert.doesNotMatch(out, /"/, 'no RFC 1035 quoting leaks into csv2')
   })
 })

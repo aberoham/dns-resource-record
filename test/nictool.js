@@ -162,10 +162,14 @@ describe('unApplyMap', () => {
 
 describe('applyMap', () => {
   it('packs the RFC fields back into the storage columns', () => {
-    const row = toStorage({ type: 'MX', exchange: 'mail.example.com.', weight: 10 })
+    // getMap('MX') is { weight: 'preference', address: 'exchange' } — the key
+    // is the NicTool column, the value the RFC field.
+    const row = toStorage({ type: 'MX', exchange: 'mail.example.com.', preference: 10 })
 
-    assert.equal(row.address, 'mail.example.com.')
+    assert.equal(row.address, 'mail.example.com.', 'exchange -> address')
+    assert.equal(row.weight, 10, 'preference -> weight')
     assert.equal(row.exchange, undefined)
+    assert.equal(row.preference, undefined)
   })
 
   it('joins a packed type into a single column', () => {
@@ -196,6 +200,32 @@ describe('applyMap', () => {
     applyMap(row, getMap('NAPTR'))
 
     assert.equal(row['flags,service,regexp'], 'must survive')
+  })
+})
+
+describe('map reuse', () => {
+  it('leaves a caller-held map intact for a packed type', () => {
+    // getMap is public, so a caller may cache the map; unApplyMap used to
+    // delete from it, breaking every later use.
+    const map = getMap('SOA')
+    const before = JSON.stringify(map)
+
+    unApplyMap({ type: 'SOA', address: "'ns1.x.','host.x.','1','2','3','4','5'" }, map)
+
+    assert.equal(JSON.stringify(map), before)
+  })
+
+  it('gives the same result when a map is used twice', () => {
+    const map = getMap('SOA')
+    const rows = [
+      { type: 'SOA', address: "'ns1.x.','host.x.','1','2','3','4','5'" },
+      { type: 'SOA', address: "'ns2.y.','host.y.','9','2','3','4','5'" },
+    ]
+    for (const r of rows) unApplyMap(r, map)
+
+    assert.equal(rows[0].mname, 'ns1.x.')
+    assert.equal(rows[1].mname, 'ns2.y.')
+    assert.equal(rows[1].address, undefined)
   })
 })
 
