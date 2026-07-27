@@ -146,6 +146,16 @@ describe('unApplyMap', () => {
     assert.equal(rr['next hashed owner name'], '2vptu5timamqttgl4luu9kg21e0aor3s')
   })
 
+  it('unpacks NSEC3PARAM, which shares NSEC3 fields but has no bitmaps', () => {
+    const rr = toRfc({ type: 'NSEC3PARAM', address: "'1','0','12','aabbccdd'" })
+
+    assert.equal(rr['hash algorithm'], 1)
+    assert.equal(rr.flags, 0)
+    assert.equal(rr.iterations, 12)
+    assert.equal(rr.salt, 'aabbccdd')
+    assert.equal(rr.address, undefined)
+  })
+
   it('unpacks a type whose rdata is packed into `address`', () => {
     const rr = toRfc({
       type: 'SOA',
@@ -204,6 +214,19 @@ describe('applyMap', () => {
 })
 
 describe('map reuse', () => {
+  it('returns a frozen map, so mutating it fails loudly', () => {
+    // Under ESM's strict mode this is a TypeError rather than a silent no-op,
+    // which is what makes the guarantee below worth having.
+    const map = getMap('SOA')
+
+    assert.equal(Object.isFrozen(map), true)
+    assert.equal(Object.isFrozen(map.address), true, 'packed types hold arrays')
+    assert.throws(() => delete map.address, TypeError)
+    assert.throws(() => {
+      map.other = 'x'
+    }, TypeError)
+  })
+
   it('leaves a caller-held map intact for a packed type', () => {
     // getMap is public, so a caller may cache the map; unApplyMap used to
     // delete from it, breaking every later use.
