@@ -4,6 +4,9 @@ Notable changes to this project are documented in this file.
 
 #### Unreleased
 
+- lib/nictool: imported getMap,applyMap,unApplyMap
+- rr/bind: quote character strings in presentation format
+
 ### [1.8.1] - 2026-07-25
 
 - rr/bind: merge charstrs for opaque rdata types
