@@ -146,6 +146,67 @@ describe('unApplyMap', () => {
     assert.equal(rr['next hashed owner name'], '2vptu5timamqttgl4luu9kg21e0aor3s')
   })
 
+  it('numbers a field the `other` VARCHAR column hands back as a string', () => {
+    // CERT reads `cert type` from `other`, so MySQL returns "1"; the setter
+    // requires an integer and threw before this was coerced.
+    const rr = toRfc({ type: 'CERT', other: '1', priority: 1234, weight: 3, address: 'AQ==' })
+
+    assert.equal(rr['cert type'], 1)
+    assert.equal(rr['key tag'], 1234)
+  })
+
+  it('leaves a mnemonic alone rather than parsing it to NaN', () => {
+    // CERT accepts "PKIX" as well as 1, so coercion has to be conditional.
+    const rr = toRfc({ type: 'CERT', other: 'PKIX', priority: 1234, weight: 3, address: 'AQ==' })
+
+    assert.equal(rr['cert type'], 'PKIX')
+  })
+
+  it('numbers every field whose RR setter demands an integer', () => {
+    // Each of these is validated with Number.isInteger downstream; a string
+    // reaching the setter throws, which is silent data loss on export.
+    const cases = [
+      ['DS', { weight: '1', priority: '5', other: '60485' }, ['digest type', 'algorithm', 'key tag']],
+      [
+        'TLSA',
+        { weight: '3', priority: '1', other: '1' },
+        ['certificate usage', 'selector', 'matching type'],
+      ],
+      ['SSHFP', { weight: '2', priority: '1' }, ['algorithm', 'fptype']],
+      ['IPSECKEY', { weight: '10', priority: '1', other: '2' }, ['precedence', 'gateway type', 'algorithm']],
+      ['DNSKEY', { weight: '256', priority: '3', other: '5' }, ['flags', 'protocol', 'algorithm']],
+      ['MX', { weight: '10' }, ['preference']],
+      ['SRV', { other: '5060' }, ['port']],
+    ]
+
+    for (const [type, row, fields] of cases) {
+      const rr = toRfc({ type, address: 'x.test.', ...row })
+      for (const f of fields) {
+        assert.equal(typeof rr[f], 'number', `${type} ${f} must be numeric, got ${typeof rr[f]}`)
+      }
+    }
+  })
+
+  it('decides by the type’s declared format, not the field name', () => {
+    // `flags` is u8 in CAA, u16 in DNSKEY and a character string in NAPTR, so
+    // a name-keyed rule would coerce a NAPTR flag of "0" into a number.
+    assert.equal(toRfc({ type: 'CAA', weight: '0', other: 'issue', address: 'x.org' }).flags, 0)
+    assert.equal(
+      toRfc({ type: 'DNSKEY', weight: '256', priority: '3', other: '5', address: 'AQ==' }).flags,
+      256,
+    )
+
+    const naptr = toRfc({ type: 'NAPTR', address: "'0','E2U+sip','!x!'", weight: 1, priority: 2 })
+    assert.equal(naptr.flags, '0', 'NAPTR flags is a character string')
+  })
+
+  it('leaves a character-string field alone when its value looks numeric', () => {
+    // CAA `tag` is a charstr; "123" is a tag, not the number 123.
+    const rr = toRfc({ type: 'CAA', weight: 0, other: '123', address: 'x.org' })
+
+    assert.equal(rr.tag, '123')
+  })
+
   it('unpacks NSEC3PARAM, which shares NSEC3 fields but has no bitmaps', () => {
     const rr = toRfc({ type: 'NSEC3PARAM', address: "'1','0','12','aabbccdd'" })
 
